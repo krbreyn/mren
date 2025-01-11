@@ -2,9 +2,12 @@ package main
 
 import (
 	"fmt"
+	_ "image/jpeg"
+	_ "image/png"
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	_ "golang.org/x/image/webp"
 )
 
 //grab all .png/.jpg/.jpeg/.webp images (gif maybe if i can figure it out)
@@ -13,12 +16,17 @@ import (
 //enter with something entered -> rename
 //enter with nothing entered -> keep old name
 //ctrl+enter -> delete image
+//shift+enter -> copy image
+//grab next image and repeat
+
+//default encoding at 640x480 for view (or smaller), button to cycle between 3 different sizes
 
 /* possibly make it so you can move files around,
 i.e. if i enter ../newfolder/myname instead of myname it will create the folder in that location
 if it doesnt exist and put it there */
 
 // have a rolling log in the corner showing the history of renames/deletions/movings etc
+
 func main() {
 	m := model{}
 	p := tea.NewProgram(m)
@@ -28,6 +36,7 @@ func main() {
 		os.Exit(1)
 	} else {
 		fmt.Println("Have a nice day!")
+		os.Exit(0)
 	}
 
 }
@@ -35,6 +44,7 @@ func main() {
 type model struct {
 	pics []pic
 	loc  int
+	res  int // 0, 1, 2 for different sizes
 }
 
 type pic struct {
