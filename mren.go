@@ -48,7 +48,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	m := model{outChan: make(chan []byte)}
+	m := model{}
 
 	extList := []string{".jpg", ".jpeg", ".png", ".webp"}
 	for _, file := range files {
@@ -63,6 +63,8 @@ func main() {
 		fmt.Println("no images found")
 		os.Exit(0)
 	}
+
+	m.outChan = make(chan []byte, len(m.paths))
 
 	m.currImage = getImage(m.paths[0])
 
