@@ -20,22 +20,9 @@ import (
 	_ "golang.org/x/image/webp"
 )
 
-//grab all .png/.jpg/.jpeg/.webp images (gif maybe if i can figure it out)
-//open first image and convert to sixel
-//display old name and ask for new name
-//enter with something entered -> rename
-//enter with nothing entered -> keep old name
-//ctrl+enter -> delete image
-//shift+enter -> copy image
-//grab next image and repeat
+// TODO figure out how to make it look pretty with lipgloss
 
-//default encoding at 640x480 for view (or smaller), button to cycle between 3 different sizes
-
-/* possibly make it so you can move files around,
-i.e. if i enter ../newfolder/myname instead of myname it will create the folder in that location
-if it doesnt exist and put it there */
-
-// have a rolling log in the corner showing the history of renames/deletions/movings etc
+// TODO refactor this mess and write tests
 
 func main() {
 	if len(os.Args) != 2 {
@@ -63,7 +50,7 @@ func main() {
 	for _, file := range files {
 		ext := path.Ext(file.Name())
 
-		if !file.IsDir() && (slices.Contains(extList, ext)) {
+		if !file.IsDir() && slices.Contains(extList, ext) {
 			m.paths = append(m.paths, fmt.Sprintf("%s/%s", m.folder, file.Name()))
 		}
 	}
@@ -125,13 +112,18 @@ func (m model) View() string {
 	sb.WriteString("\n")
 
 	sb.WriteString(fmt.Sprintf("img: %s\n%d/%d", m.paths[m.loc], m.loc+1, len(m.paths)))
+
 	sb.WriteString("\nEnter New Name: \n")
 	sb.WriteString(m.textInput.View())
-	sb.WriteString("\n[keybindings to be shown]\n")
+
+	sb.WriteString("\nenter: submit | empty = skip | 'asd' = rename | '../x/asd' = move\n")
+	sb.WriteString("(todo) shift+enter: delete\n")
+	sb.WriteString("(todo) ctrl+enter: copy\n")
+
 	sb.WriteString(m.displayMsg)
 	sb.WriteString("\n")
 
-	sb.Write((m.currImage))
+	sb.Write(m.currImage)
 
 	return sb.String()
 }
@@ -152,6 +144,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		// TODO ask if you're all done before quitting
+		// TODO implement saving to different folders
+		// TODO remove "test/" from placeholder and img:
 		case "enter":
 			if m.loc < len(m.paths)-1 {
 				input := m.textInput.Value()
@@ -165,6 +159,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					m.displayMsg = fmt.Sprintf("skipped %s", m.paths[m.loc])
 				}
+
+				m.textInput.Reset()
 
 				m.loc++
 				m.textInput.Placeholder = m.paths[m.loc]
@@ -211,7 +207,7 @@ func getImage(filename string) []byte {
 	out, _ := cmd.Output()
 	th := strings.Split(strings.TrimSpace(string(out)), " ")[0]
 	temp, _ := strconv.Atoi(th)
-	pxh := uint(temp * 9)
+	pxh := uint(temp * 7)
 
 	var buf bytes.Buffer
 	img, _, _ := image.Decode(file)
