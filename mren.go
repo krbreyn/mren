@@ -146,7 +146,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// TODO ask if you're all done before quitting
 		// TODO implement saving to different folders
-		// TODO remove "test/" from placeholder and img:
 		case "enter":
 			if m.loc < len(m.paths)-1 {
 				input := m.textInput.Value()
