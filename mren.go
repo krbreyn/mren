@@ -129,7 +129,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.KeyMsg:
-
 		switch msg.String() {
 
 		case "ctrl+c", "ctrl+d", "q":
@@ -143,6 +142,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.exitMsg = "All done!"
 				return m, tea.Quit
 			}
+
 		}
 
 	case tea.WindowSizeMsg:
@@ -152,10 +152,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if oldLoc != m.loc {
-		//USE A CHANNEL to download and fetch images
-		//goroutine in the background converts images to sixel and sends to channel
-		//recieve from channel here and set currimage, it will be ok to block and lag because
-		//that should rarely happen
 		m.currImage = <-m.outChan
 		cmds = append(cmds, tea.ClearScreen)
 	}
