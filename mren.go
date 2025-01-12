@@ -41,7 +41,7 @@ func main() {
 	ti := textinput.New()
 	ti.Focus()
 	ti.CharLimit = 128
-	ti.Width = 32
+	ti.Width = 64
 
 	m.textInput = ti
 
@@ -63,7 +63,7 @@ func main() {
 	m.outChan = make(chan []byte, len(m.paths))
 
 	m.currImage = getImage(m.paths[0])
-	m.textInput.Placeholder = m.paths[0]
+	m.textInput.Placeholder = trimPath(m.paths[0], m.folder)
 
 	// TODO should be a status notif to show if images are still being converted and how many
 	go backgroundDownloader(m.paths[1:], m.outChan)
@@ -111,7 +111,8 @@ func (m model) View() string {
 
 	sb.WriteString("\n")
 
-	sb.WriteString(fmt.Sprintf("img: %s\n%d/%d", m.paths[m.loc], m.loc+1, len(m.paths)))
+	sb.WriteString(fmt.Sprintf("img: %s\n%d/%d",
+		trimPath(m.paths[0], m.folder), m.loc+1, len(m.paths)))
 
 	sb.WriteString("\nEnter New Name: \n")
 	sb.WriteString(m.textInput.View())
@@ -155,9 +156,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if err != nil {
 						panic(err)
 					}
-					m.displayMsg = fmt.Sprintf("renamed %s to %s", m.paths[m.loc], new_path)
+					m.displayMsg = fmt.Sprintf("renamed %s to %s", trimPath(m.paths[m.loc], m.folder), new_path)
 				} else {
-					m.displayMsg = fmt.Sprintf("skipped %s", m.paths[m.loc])
+					m.displayMsg = fmt.Sprintf("skipped %s", trimPath(m.paths[m.loc], m.folder))
 				}
 
 				m.textInput.Reset()
@@ -180,7 +181,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if oldLoc != m.loc {
 		m.currImage = <-m.outChan
-		cmds = append(cmds, tea.ClearScreen)
 	}
 
 	m.textInput, cmd = m.textInput.Update(msg)
@@ -190,6 +190,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // util
+
+func trimPath(filename, folder string) string {
+	return strings.TrimPrefix(filename, folder+"/")
+}
 
 func getImage(filename string) []byte {
 
