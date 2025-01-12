@@ -5,6 +5,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"os"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	_ "golang.org/x/image/webp"
@@ -28,7 +29,25 @@ if it doesnt exist and put it there */
 // have a rolling log in the corner showing the history of renames/deletions/movings etc
 
 func main() {
+	if len(os.Args) > 2 || len(os.Args) < 2 {
+		fmt.Println("Usage: mren <directory>")
+		os.Exit(0)
+	}
+
+	files, err := os.ReadDir(os.Args[1])
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
 	m := model{}
+
+	for _, file := range files {
+		if !file.IsDir() {
+			m.paths = append(m.paths, file.Name())
+		}
+	}
+
 	p := tea.NewProgram(m)
 
 	if _, err := p.Run(); err != nil {
@@ -42,14 +61,10 @@ func main() {
 }
 
 type model struct {
-	pics []pic
-	loc  int
-	res  int // 0, 1, 2 for different sizes
-}
-
-type pic struct {
-	path string
-	data []byte //sixel
+	paths []string
+	//pics []byte
+	loc int
+	//res  int // 0, 1, 2 for different sizes
 }
 
 func (m model) Init() tea.Cmd {
@@ -57,7 +72,12 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) View() string {
-	return "not implemented!"
+	var sb strings.Builder
+
+	for _, f := range m.paths {
+		sb.WriteString(f + "\n")
+	}
+	return sb.String()
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
