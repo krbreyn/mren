@@ -163,7 +163,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.textInput.Reset()
 
 				m.loc++
-				m.textInput.Placeholder = m.paths[m.loc]
+				m.textInput.Placeholder = trimPath(m.paths[m.loc], m.folder)
 			} else {
 				//m.toQuit++
 				m.exitMsg = "All done!"
