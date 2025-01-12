@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-sixel"
 	"github.com/nfnt/resize"
@@ -50,6 +51,13 @@ func main() {
 
 	m := model{}
 
+	ti := textinput.New()
+	ti.Focus()
+	ti.CharLimit = 128
+	ti.Width = 32
+
+	m.textInput = ti
+
 	extList := []string{".jpg", ".jpeg", ".png", ".webp"}
 	for _, file := range files {
 		ext := path.Ext(file.Name())
@@ -67,6 +75,7 @@ func main() {
 	m.outChan = make(chan []byte, len(m.paths))
 
 	m.currImage = getImage(m.paths[0])
+	m.textInput.Placeholder = m.paths[0]
 
 	// TODO should be a status notif to show if images are still being converted and how many
 	go backgroundDownloader(m.paths[1:], m.outChan)
@@ -99,23 +108,26 @@ type model struct {
 	loc       int
 	exitMsg   string
 	outChan   chan []byte
+	textInput textinput.Model
 	//res  int // 0, 1, 2 for different sizes
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.EnterAltScreen
+	return tea.Batch(tea.EnterAltScreen, textinput.Blink)
 }
 
 func (m model) View() string {
 	var sb strings.Builder
 
-	sb.Write((m.currImage))
 	sb.WriteString("\n")
 
 	sb.WriteString(fmt.Sprintf("img: %s\n%d/%d", m.paths[m.loc], m.loc+1, len(m.paths)))
-	sb.WriteString("\nEnter New Name: ")
+	sb.WriteString("\nEnter New Name: \n")
+	sb.WriteString(m.textInput.View())
 	sb.WriteString("\n[not yet implemented]")
-	sb.WriteString("\n[keybindings to be shown]")
+	sb.WriteString("\n[keybindings to be shown]\n")
+
+	sb.Write((m.currImage))
 
 	return sb.String()
 }
@@ -123,6 +135,7 @@ func (m model) View() string {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	oldLoc := m.loc
 	var (
+		cmd  tea.Cmd
 		cmds []tea.Cmd
 	)
 
@@ -131,13 +144,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 
-		case "ctrl+c", "ctrl+d", "q":
+		case "ctrl+c", "ctrl+d":
 			return m, tea.Quit
 
 		// TODO ask if you're all done before quitting
 		case "enter":
 			if m.loc < len(m.paths)-1 {
 				m.loc++
+				m.textInput.Placeholder = m.paths[m.loc]
 			} else {
 				m.exitMsg = "All done!"
 				return m, tea.Quit
@@ -155,6 +169,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currImage = <-m.outChan
 		cmds = append(cmds, tea.ClearScreen)
 	}
+
+	m.textInput, cmd = m.textInput.Update(msg)
+	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
 }
