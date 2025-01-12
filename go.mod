@@ -4,6 +4,8 @@ go 1.23.4
 
 require (
 	github.com/charmbracelet/bubbletea v1.2.4
+	github.com/mattn/go-sixel v0.0.5
+	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
 	golang.org/x/image v0.23.0
 )
 
@@ -21,6 +23,7 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.15.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/soniakeys/quant v1.0.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/sys v0.27.0 // indirect
 	golang.org/x/text v0.21.0 // indirect

@@ -1,13 +1,21 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"image"
 	_ "image/jpeg"
 	_ "image/png"
 	"os"
+	"os/exec"
+	"path"
+	"slices"
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/mattn/go-sixel"
+	"github.com/nfnt/resize"
 	_ "golang.org/x/image/webp"
 )
 
@@ -29,7 +37,7 @@ if it doesnt exist and put it there */
 // have a rolling log in the corner showing the history of renames/deletions/movings etc
 
 func main() {
-	if len(os.Args) > 2 || len(os.Args) < 2 {
+	if len(os.Args) != 2 {
 		fmt.Println("Usage: mren <directory>")
 		os.Exit(0)
 	}
@@ -42,9 +50,13 @@ func main() {
 
 	m := model{}
 
-	for _, file := range files {
-		if !file.IsDir() {
+	extList := []string{".jpg", ".jpeg", ".png", ".webp"}
+	for i, file := range files {
+		ext := path.Ext(file.Name())
+
+		if !file.IsDir() && (slices.Contains(extList, ext)) {
 			m.paths = append(m.paths, file.Name())
+			m.getImage(file.Name(), i)
 		}
 	}
 
@@ -62,8 +74,8 @@ func main() {
 
 type model struct {
 	paths []string
-	//pics []byte
-	loc int
+	pics  [][]byte
+	loc   int
 	//res  int // 0, 1, 2 for different sizes
 }
 
@@ -74,10 +86,49 @@ func (m model) Init() tea.Cmd {
 func (m model) View() string {
 	var sb strings.Builder
 
-	for _, f := range m.paths {
-		sb.WriteString(f + "\n")
-	}
+	sb.Write((m.pics[m.loc]))
+	sb.WriteString("\n")
+
+	sb.WriteString(fmt.Sprintf("img: %s | %d/%d", m.paths[m.loc], m.loc+1, len(m.pics)))
+
 	return sb.String()
+}
+
+func (m *model) getImage(filename string, loc int) {
+	fmt.Println("doing stuff")
+	folder := strings.TrimSuffix(os.Args[1], "/")
+	fmt.Println("opening image", loc, filename, folder)
+	file, err := os.Open(fmt.Sprintf("%s/%s", folder, filename))
+	if err != nil {
+		m.pics = append(m.pics, []byte("opening file failed"))
+		return
+	}
+	defer file.Close()
+
+	//get size for image
+	// TODO handle resizing events
+	cmd := exec.Command("stty", "size")
+	cmd.Stdin = os.Stdin
+	// TODO handle err
+	out, _ := cmd.Output()
+	th := strings.Split(strings.TrimSpace(string(out)), " ")[0]
+	temp, _ := strconv.Atoi(th)
+	pxh := uint(temp * 9)
+
+	fmt.Println("decoding image")
+	var buf bytes.Buffer
+	img, _, _ := image.Decode(file)
+	img = resize.Resize(0, pxh, img, resize.Lanczos3)
+	fmt.Println("encoding image")
+	encoder := sixel.NewEncoder(&buf)
+	err = encoder.Encode(img)
+	if err != nil {
+		m.pics = append(m.pics, []byte("encoding failed"))
+		return
+	}
+
+	fmt.Println("setting image")
+	m.pics = append(m.pics, buf.Bytes())
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
