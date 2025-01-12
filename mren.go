@@ -51,21 +51,31 @@ func main() {
 	m := model{}
 
 	extList := []string{".jpg", ".jpeg", ".png", ".webp"}
-	for i, file := range files {
+	for _, file := range files {
 		ext := path.Ext(file.Name())
 
 		if !file.IsDir() && (slices.Contains(extList, ext)) {
 			m.paths = append(m.paths, file.Name())
-			m.getImage(file.Name(), i)
 		}
 	}
 
+	if len(m.paths) == 0 {
+		fmt.Println("no images found")
+		os.Exit(0)
+	}
+
+	m.getImage(m.paths[0])
+
 	p := tea.NewProgram(m)
 
-	if _, err := p.Run(); err != nil {
+	if m, err := p.Run(); err != nil {
 		fmt.Println("error:", err)
 		os.Exit(1)
 	} else {
+		s, ok := m.(model)
+		if ok {
+			fmt.Println(s.exitMsg)
+		}
 		fmt.Println("Have a nice day!")
 		os.Exit(0)
 	}
@@ -73,9 +83,10 @@ func main() {
 }
 
 type model struct {
-	paths []string
-	pics  [][]byte
-	loc   int
+	paths     []string
+	currImage []byte
+	loc       int
+	exitMsg   string
 	//res  int // 0, 1, 2 for different sizes
 }
 
@@ -86,49 +97,15 @@ func (m model) Init() tea.Cmd {
 func (m model) View() string {
 	var sb strings.Builder
 
-	sb.Write((m.pics[m.loc]))
+	sb.Write((m.currImage))
 	sb.WriteString("\n")
 
-	sb.WriteString(fmt.Sprintf("img: %s | %d/%d", m.paths[m.loc], m.loc+1, len(m.pics)))
+	sb.WriteString(fmt.Sprintf("img: %s\n%d/%d", m.paths[m.loc], m.loc+1, len(m.paths)))
+	sb.WriteString("\nEnter New Name: ")
+	sb.WriteString("\n[not yet implemented]")
+	sb.WriteString("\n[keybindings to be shown]")
 
 	return sb.String()
-}
-
-func (m *model) getImage(filename string, loc int) {
-	fmt.Println("doing stuff")
-	folder := strings.TrimSuffix(os.Args[1], "/")
-	fmt.Println("opening image", loc, filename, folder)
-	file, err := os.Open(fmt.Sprintf("%s/%s", folder, filename))
-	if err != nil {
-		m.pics = append(m.pics, []byte("opening file failed"))
-		return
-	}
-	defer file.Close()
-
-	//get size for image
-	// TODO handle resizing events
-	cmd := exec.Command("stty", "size")
-	cmd.Stdin = os.Stdin
-	// TODO handle err
-	out, _ := cmd.Output()
-	th := strings.Split(strings.TrimSpace(string(out)), " ")[0]
-	temp, _ := strconv.Atoi(th)
-	pxh := uint(temp * 9)
-
-	fmt.Println("decoding image")
-	var buf bytes.Buffer
-	img, _, _ := image.Decode(file)
-	img = resize.Resize(0, pxh, img, resize.Lanczos3)
-	fmt.Println("encoding image")
-	encoder := sixel.NewEncoder(&buf)
-	err = encoder.Encode(img)
-	if err != nil {
-		m.pics = append(m.pics, []byte("encoding failed"))
-		return
-	}
-
-	fmt.Println("setting image")
-	m.pics = append(m.pics, buf.Bytes())
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -143,13 +120,61 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "ctrl+d", "q":
 			return m, tea.Quit
+
+		// TODO ask if you're all done before quitting
+		case "enter":
+			if m.loc < len(m.paths)-1 {
+				m.loc++
+			} else {
+				m.exitMsg = "All done!"
+				return m, tea.Quit
+			}
 		}
 
 	}
 
 	if oldLoc != m.loc {
+		//USE A CHANNEL to download and fetch images
+		//goroutine in the background converts images to sixel and sends to channel
+		//recieve from channel here and set currimage, it will be ok to block and lag because
+		//that should rarely happen
+		m.getImage(m.paths[m.loc])
 		cmds = append(cmds, tea.ClearScreen)
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+// util
+
+func (m *model) getImage(filename string) {
+	folder := strings.TrimSuffix(os.Args[1], "/")
+	file, err := os.Open(fmt.Sprintf("%s/%s", folder, filename))
+	if err != nil {
+		m.currImage = []byte("opening file failed")
+		return
+	}
+	defer file.Close()
+
+	//get size for image
+	// TODO handle resizing events
+	cmd := exec.Command("stty", "size")
+	cmd.Stdin = os.Stdin
+	// TODO handle err
+	out, _ := cmd.Output()
+	th := strings.Split(strings.TrimSpace(string(out)), " ")[0]
+	temp, _ := strconv.Atoi(th)
+	pxh := uint(temp * 9)
+
+	var buf bytes.Buffer
+	img, _, _ := image.Decode(file)
+	img = resize.Resize(0, pxh, img, resize.Lanczos3)
+	encoder := sixel.NewEncoder(&buf)
+	err = encoder.Encode(img)
+	if err != nil {
+		m.currImage = []byte("encoding failed")
+		return
+	}
+
+	m.currImage = buf.Bytes()
 }
