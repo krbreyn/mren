@@ -58,12 +58,13 @@ func main() {
 
 	m.textInput = ti
 
+	m.folder = strings.TrimSuffix(os.Args[1], "/")
 	extList := []string{".jpg", ".jpeg", ".png", ".webp"}
 	for _, file := range files {
 		ext := path.Ext(file.Name())
 
 		if !file.IsDir() && (slices.Contains(extList, ext)) {
-			m.paths = append(m.paths, file.Name())
+			m.paths = append(m.paths, fmt.Sprintf("%s/%s", m.folder, file.Name()))
 		}
 	}
 
@@ -87,7 +88,7 @@ func main() {
 		os.Exit(1)
 	} else {
 		s, ok := m.(model)
-		if ok {
+		if ok && s.exitMsg != "" {
 			fmt.Println(s.exitMsg)
 		}
 		fmt.Println("Have a nice day!")
@@ -103,12 +104,14 @@ func backgroundDownloader(paths []string, outChan chan<- []byte) {
 }
 
 type model struct {
-	paths     []string
-	currImage []byte
-	loc       int
-	exitMsg   string
-	outChan   chan []byte
-	textInput textinput.Model
+	paths      []string
+	currImage  []byte
+	loc        int
+	exitMsg    string
+	outChan    chan []byte
+	textInput  textinput.Model
+	displayMsg string
+	folder     string
 	//res  int // 0, 1, 2 for different sizes
 }
 
@@ -124,8 +127,9 @@ func (m model) View() string {
 	sb.WriteString(fmt.Sprintf("img: %s\n%d/%d", m.paths[m.loc], m.loc+1, len(m.paths)))
 	sb.WriteString("\nEnter New Name: \n")
 	sb.WriteString(m.textInput.View())
-	sb.WriteString("\n[not yet implemented]")
 	sb.WriteString("\n[keybindings to be shown]\n")
+	sb.WriteString(m.displayMsg)
+	sb.WriteString("\n")
 
 	sb.Write((m.currImage))
 
@@ -150,9 +154,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// TODO ask if you're all done before quitting
 		case "enter":
 			if m.loc < len(m.paths)-1 {
+				input := m.textInput.Value()
+				if input != "" {
+					new_path := fmt.Sprintf("%s/%s%s", m.folder, input, path.Ext(m.paths[m.loc]))
+					err := os.Rename(m.paths[m.loc], new_path)
+					if err != nil {
+						panic(err)
+					}
+					m.displayMsg = fmt.Sprintf("renamed %s to %s", m.paths[m.loc], new_path)
+				} else {
+					m.displayMsg = fmt.Sprintf("skipped %s", m.paths[m.loc])
+				}
+
 				m.loc++
 				m.textInput.Placeholder = m.paths[m.loc]
 			} else {
+				//m.toQuit++
 				m.exitMsg = "All done!"
 				return m, tea.Quit
 			}
@@ -180,8 +197,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func getImage(filename string) []byte {
 
-	folder := strings.TrimSuffix(os.Args[1], "/")
-	file, err := os.Open(fmt.Sprintf("%s/%s", folder, filename))
+	file, err := os.Open(filename)
 	if err != nil {
 		return []byte("opening file failed")
 	}
