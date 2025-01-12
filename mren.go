@@ -48,7 +48,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	m := model{}
+	m := model{outChan: make(chan []byte)}
 
 	extList := []string{".jpg", ".jpeg", ".png", ".webp"}
 	for _, file := range files {
@@ -64,7 +64,10 @@ func main() {
 		os.Exit(0)
 	}
 
-	m.getImage(m.paths[0])
+	m.currImage = getImage(m.paths[0])
+
+	// TODO should be a status notif to show if images are still being converted and how many
+	go backgroundDownloader(m.paths[1:], m.outChan)
 
 	p := tea.NewProgram(m)
 
@@ -82,11 +85,18 @@ func main() {
 
 }
 
+func backgroundDownloader(paths []string, outChan chan<- []byte) {
+	for _, p := range paths {
+		outChan <- getImage(p)
+	}
+}
+
 type model struct {
 	paths     []string
 	currImage []byte
 	loc       int
 	exitMsg   string
+	outChan   chan []byte
 	//res  int // 0, 1, 2 for different sizes
 }
 
@@ -117,7 +127,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.KeyMsg:
+
 		switch msg.String() {
+
 		case "ctrl+c", "ctrl+d", "q":
 			return m, tea.Quit
 
@@ -131,6 +143,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+	case tea.WindowSizeMsg:
+		/* TODO change the image size to a model variable
+		initialized on startup and change it through here */
+
 	}
 
 	if oldLoc != m.loc {
@@ -138,7 +154,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		//goroutine in the background converts images to sixel and sends to channel
 		//recieve from channel here and set currimage, it will be ok to block and lag because
 		//that should rarely happen
-		m.getImage(m.paths[m.loc])
+		m.currImage = <-m.outChan
 		cmds = append(cmds, tea.ClearScreen)
 	}
 
@@ -147,12 +163,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // util
 
-func (m *model) getImage(filename string) {
+func getImage(filename string) []byte {
+
 	folder := strings.TrimSuffix(os.Args[1], "/")
 	file, err := os.Open(fmt.Sprintf("%s/%s", folder, filename))
 	if err != nil {
-		m.currImage = []byte("opening file failed")
-		return
+		return []byte("opening file failed")
 	}
 	defer file.Close()
 
@@ -172,9 +188,8 @@ func (m *model) getImage(filename string) {
 	encoder := sixel.NewEncoder(&buf)
 	err = encoder.Encode(img)
 	if err != nil {
-		m.currImage = []byte("encoding failed")
-		return
+		return []byte("encoding failed")
 	}
 
-	m.currImage = buf.Bytes()
+	return buf.Bytes()
 }
