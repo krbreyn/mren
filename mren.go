@@ -24,6 +24,9 @@ import (
 
 // TODO refactor this mess and write tests
 
+// undo commands should be a stack of functions that you pop and call to undo the action
+//but do that after more refactoring
+
 func main() {
 	if len(os.Args) != 2 {
 		fmt.Println("Usage: mren <directory>")
@@ -68,7 +71,7 @@ func (m model) View() string {
 	var sb strings.Builder
 
 	sb.WriteString(fmt.Sprintf("img: %s\n%d/%d\n",
-		trimPath(m.paths[0], m.folder), m.loc+1, len(m.paths)))
+		trimPath(m.paths[m.loc], m.folder), m.loc+1, len(m.paths)))
 
 	sb.WriteString("Enter New Name:\n")
 	sb.WriteString(m.textInput.View())
@@ -77,6 +80,7 @@ func (m model) View() string {
 	sb.WriteString("alt+enter: with '../x' = move without rename\n")
 	sb.WriteString("(todo) shift+enter: delete\n")
 	sb.WriteString("(todo) ctrl+enter: copy\n")
+	sb.WriteString("(todo) undo button\n")
 
 	sb.WriteString(m.displayMsg)
 	sb.WriteString("\n")
@@ -106,10 +110,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.loc < len(m.paths)-1 {
 				input := m.textInput.Value()
 				if input != "" {
-					if strings.TrimPrefix(input, "../") != input {
-						if err := assureDirsExist(input, m.folder, msg); err != nil {
-							panic(err)
-						}
+					if err := assureDirsExist(input, m.folder, msg); err != nil {
+						panic(err)
 					}
 
 					new_path := m.getNewPath(input, msg)
@@ -125,6 +127,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.textInput.Reset()
 
 				m.loc++
+				//TODO trim ext
 				m.textInput.Placeholder = trimPath(m.paths[m.loc], m.folder)
 			} else {
 				//m.toQuit++, displayMsg = "once more to quit"
@@ -141,6 +144,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if oldLoc != m.loc {
 		m.currImage = <-m.outChan
+		cmds = append(cmds, tea.ClearScreen)
 	}
 
 	m.textInput, cmd = m.textInput.Update(msg)
@@ -181,9 +185,10 @@ func initialModel() model {
 		os.Exit(0)
 	}
 
-	m.outChan = make(chan []byte, len(m.paths))
+	m.outChan = make(chan []byte, 20)
 
 	m.currImage = getImage(m.paths[0])
+	//TODO trim ext
 	m.textInput.Placeholder = trimPath(m.paths[0], m.folder)
 
 	// TODO should be a status notif to show if images are still being converted and how many
@@ -267,7 +272,10 @@ func getImage(filename string) []byte {
 	pxh := uint(temp * 7)
 
 	var buf bytes.Buffer
-	img, _, _ := image.Decode(file)
+	img, _, err := image.Decode(file)
+	if err != nil {
+		return []byte("error decoding image")
+	}
 	img = resize.Resize(0, pxh, img, resize.Lanczos3)
 	encoder := sixel.NewEncoder(&buf)
 	err = encoder.Encode(img)
