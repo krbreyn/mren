@@ -30,43 +30,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	files, err := os.ReadDir(os.Args[1])
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-
-	m := model{}
-
-	ti := textinput.New()
-	ti.Focus()
-	ti.CharLimit = 128
-	ti.Width = 64
-
-	m.textInput = ti
-
-	m.folder = strings.TrimSuffix(os.Args[1], "/")
-	extList := []string{".jpg", ".jpeg", ".png", ".webp"}
-	for _, file := range files {
-		ext := path.Ext(file.Name())
-
-		if !file.IsDir() && slices.Contains(extList, ext) {
-			m.paths = append(m.paths, fmt.Sprintf("%s/%s", m.folder, file.Name()))
-		}
-	}
-
-	if len(m.paths) == 0 {
-		fmt.Println("no images found")
-		os.Exit(0)
-	}
-
-	m.outChan = make(chan []byte, len(m.paths))
-
-	m.currImage = getImage(m.paths[0])
-	m.textInput.Placeholder = trimPath(m.paths[0], m.folder)
-
-	// TODO should be a status notif to show if images are still being converted and how many
-	go backgroundDownloader(m.paths[1:], m.outChan)
+	m := initialModel()
 
 	p := tea.NewProgram(m)
 
@@ -82,12 +46,6 @@ func main() {
 		os.Exit(0)
 	}
 
-}
-
-func backgroundDownloader(paths []string, outChan chan<- []byte) {
-	for _, p := range paths {
-		outChan <- getImage(p)
-	}
 }
 
 type model struct {
@@ -117,7 +75,8 @@ func (m model) View() string {
 	sb.WriteString("\nEnter New Name: \n")
 	sb.WriteString(m.textInput.View())
 
-	sb.WriteString("\nenter: submit | empty = skip | 'asd' = rename | '../x/asd' = move\n")
+	sb.WriteString("\nenter: empty = skip | 'asd' = rename | '../x/asd' = move & rename\n")
+	sb.WriteString("alt+enter: with '../x' = move without rename\n")
 	sb.WriteString("(todo) shift+enter: delete\n")
 	sb.WriteString("(todo) ctrl+enter: copy\n")
 
@@ -144,18 +103,48 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "ctrl+d":
 			return m, tea.Quit
 
-		// TODO ask if you're all done before quitting
-		// TODO implement saving to different folders
-		case "enter":
+		// TODO ask if you're all done before quitting (after a going back mechanism)
+
+		// TODO if input begins with "../" then split by "/" and check every
+		// field except the last to see if the directory exists (create if doesnt)
+		// make it a function called assureDirsExist()
+		case "enter", "alt+enter":
 			if m.loc < len(m.paths)-1 {
 				input := m.textInput.Value()
 				if input != "" {
-					new_path := fmt.Sprintf("%s/%s%s", m.folder, input, path.Ext(m.paths[m.loc]))
+					if strings.TrimPrefix(input, "../") != input {
+						switch msg.String() {
+						case "enter":
+							if err := assureDirsExist(input, m.folder, false); err != nil {
+								panic(err)
+							}
+						case "alt+enter":
+							if err := assureDirsExist(input, m.folder, true); err != nil {
+								panic(err)
+							}
+						}
+					}
+					var new_path string
+					switch msg.String() {
+					case "enter":
+						new_path = fmt.Sprintf(
+							"%s/%s%s", m.folder, input, path.Ext(m.paths[m.loc]))
+						m.displayMsg = fmt.Sprintf(
+							"renamed %s to %s", trimPath(m.paths[m.loc], m.folder), new_path)
+					case "alt+enter":
+						if input[len(input)-1] != byte('/') {
+							input += "/"
+						}
+						new_path = fmt.Sprintf(
+							"%s/%s%s", m.folder, input, trimPath(m.paths[m.loc], m.folder))
+						m.displayMsg = fmt.Sprintf(
+							"moved %s to %s", trimPath(m.paths[m.loc], m.folder), trimPath(new_path, m.folder))
+					}
+
 					err := os.Rename(m.paths[m.loc], new_path)
 					if err != nil {
 						panic(err)
 					}
-					m.displayMsg = fmt.Sprintf("renamed %s to %s", trimPath(m.paths[m.loc], m.folder), new_path)
 				} else {
 					m.displayMsg = fmt.Sprintf("skipped %s", trimPath(m.paths[m.loc], m.folder))
 				}
@@ -165,11 +154,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.loc++
 				m.textInput.Placeholder = trimPath(m.paths[m.loc], m.folder)
 			} else {
-				//m.toQuit++
+				//m.toQuit++, displayMsg = "once more to quit"
 				m.exitMsg = "All done!"
 				return m, tea.Quit
 			}
-
 		}
 
 	case tea.WindowSizeMsg:
@@ -188,10 +176,82 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+var extList []string = []string{".jpg", ".jpeg", ".png", ".webp"}
+
+func initialModel() model {
+	files, err := os.ReadDir(os.Args[1])
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	m := model{}
+
+	ti := textinput.New()
+	ti.Focus()
+	ti.CharLimit = 128
+	ti.Width = 64
+
+	m.textInput = ti
+
+	m.folder = strings.TrimSuffix(os.Args[1], "/")
+	for _, file := range files {
+		ext := path.Ext(file.Name())
+
+		if !file.IsDir() && slices.Contains(extList, ext) {
+			m.paths = append(m.paths, fmt.Sprintf("%s/%s", m.folder, file.Name()))
+		}
+	}
+
+	if len(m.paths) == 0 {
+		fmt.Println("no images found")
+		os.Exit(0)
+	}
+
+	m.outChan = make(chan []byte, len(m.paths))
+
+	m.currImage = getImage(m.paths[0])
+	m.textInput.Placeholder = trimPath(m.paths[0], m.folder)
+
+	// TODO should be a status notif to show if images are still being converted and how many
+	go backgroundDownloader(m.paths[1:], m.outChan)
+
+	return m
+}
+
 // util
+
+func assureDirsExist(input, folder string, doLast bool) error {
+	fields := strings.Split(input, "/")
+	path := folder + "/"
+	var target int
+	switch doLast {
+	case true:
+		target = len(fields)
+	case false:
+		target = len(fields) - 1
+	}
+	for i := 0; i < target; i++ {
+		path += fields[i] + "/"
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			if err := os.Mkdir(path, os.ModePerm); err != nil {
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
 
 func trimPath(filename, folder string) string {
 	return strings.TrimPrefix(filename, folder+"/")
+}
+
+func backgroundDownloader(paths []string, outChan chan<- []byte) {
+	for _, p := range paths {
+		outChan <- getImage(p)
+	}
 }
 
 func getImage(filename string) []byte {
