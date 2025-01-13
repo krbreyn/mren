@@ -104,10 +104,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		// TODO ask if you're all done before quitting (after a going back mechanism)
-
-		// TODO if input begins with "../" then split by "/" and check every
-		// field except the last to see if the directory exists (create if doesnt)
-		// make it a function called assureDirsExist()
+		// TODO remove duplicate code, extract into functions
 		case "enter", "alt+enter":
 			if m.loc < len(m.paths)-1 {
 				input := m.textInput.Value()
