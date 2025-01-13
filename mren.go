@@ -104,39 +104,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		// TODO ask if you're all done before quitting (after a going back mechanism)
-		// TODO remove duplicate code, extract into functions
 		case "enter", "alt+enter":
 			if m.loc < len(m.paths)-1 {
 				input := m.textInput.Value()
 				if input != "" {
 					if strings.TrimPrefix(input, "../") != input {
-						switch msg.String() {
-						case "enter":
-							if err := assureDirsExist(input, m.folder, false); err != nil {
-								panic(err)
-							}
-						case "alt+enter":
-							if err := assureDirsExist(input, m.folder, true); err != nil {
-								panic(err)
-							}
+						if err := assureDirsExist(input, m.folder, msg.String()); err != nil {
+							panic(err)
 						}
 					}
-					var new_path string
-					switch msg.String() {
-					case "enter":
-						new_path = fmt.Sprintf(
-							"%s/%s%s", m.folder, input, path.Ext(m.paths[m.loc]))
-						m.displayMsg = fmt.Sprintf(
-							"renamed %s to %s", trimPath(m.paths[m.loc], m.folder), new_path)
-					case "alt+enter":
-						if input[len(input)-1] != byte('/') {
-							input += "/"
-						}
-						new_path = fmt.Sprintf(
-							"%s/%s%s", m.folder, input, trimPath(m.paths[m.loc], m.folder))
-						m.displayMsg = fmt.Sprintf(
-							"moved %s to %s", trimPath(m.paths[m.loc], m.folder), trimPath(new_path, m.folder))
-					}
+
+					new_path := m.getNewPath(msg, input)
 
 					err := os.Rename(m.paths[m.loc], new_path)
 					if err != nil {
@@ -171,6 +149,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
+}
+
+func (m *model) getNewPath(msg tea.KeyMsg, input string) string {
+	var new_path string
+
+	switch msg.String() {
+	case "enter":
+		new_path = fmt.Sprintf(
+			"%s/%s%s", m.folder, input, path.Ext(m.paths[m.loc]))
+		m.displayMsg = fmt.Sprintf(
+			"renamed %s to %s", trimPath(m.paths[m.loc], m.folder), new_path)
+	case "alt+enter":
+		if input[len(input)-1] != byte('/') {
+			input += "/"
+		}
+		new_path = fmt.Sprintf(
+			"%s/%s%s", m.folder, input, trimPath(m.paths[m.loc], m.folder))
+		m.displayMsg = fmt.Sprintf(
+			"moved %s to %s", trimPath(m.paths[m.loc], m.folder), trimPath(new_path, m.folder))
+	}
+	return new_path
 }
 
 var extList []string = []string{".jpg", ".jpeg", ".png", ".webp"}
@@ -218,14 +217,14 @@ func initialModel() model {
 
 // util
 
-func assureDirsExist(input, folder string, doLast bool) error {
+func assureDirsExist(input, folder, key string) error {
 	fields := strings.Split(input, "/")
 	path := folder + "/"
 	var target int
-	switch doLast {
-	case true:
+	switch key {
+	case "alt+enter":
 		target = len(fields)
-	case false:
+	case "enter":
 		target = len(fields) - 1
 	}
 	for i := 0; i < target; i++ {
