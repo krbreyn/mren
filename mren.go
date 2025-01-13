@@ -67,12 +67,10 @@ func (m model) Init() tea.Cmd {
 func (m model) View() string {
 	var sb strings.Builder
 
-	sb.WriteString("\n")
-
-	sb.WriteString(fmt.Sprintf("img: %s\n%d/%d",
+	sb.WriteString(fmt.Sprintf("img: %s\n%d/%d\n",
 		trimPath(m.paths[0], m.folder), m.loc+1, len(m.paths)))
 
-	sb.WriteString("\nEnter New Name: \n")
+	sb.WriteString("Enter New Name:\n")
 	sb.WriteString(m.textInput.View())
 
 	sb.WriteString("\nenter: empty = skip | 'asd' = rename | '../x/asd' = move & rename\n")
@@ -109,12 +107,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				input := m.textInput.Value()
 				if input != "" {
 					if strings.TrimPrefix(input, "../") != input {
-						if err := assureDirsExist(input, m.folder, msg.String()); err != nil {
+						if err := assureDirsExist(input, m.folder, msg); err != nil {
 							panic(err)
 						}
 					}
 
-					new_path := m.getNewPath(msg, input)
+					new_path := m.getNewPath(input, msg)
 
 					err := os.Rename(m.paths[m.loc], new_path)
 					if err != nil {
@@ -149,27 +147,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
-}
-
-func (m *model) getNewPath(msg tea.KeyMsg, input string) string {
-	var new_path string
-
-	switch msg.String() {
-	case "enter":
-		new_path = fmt.Sprintf(
-			"%s/%s%s", m.folder, input, path.Ext(m.paths[m.loc]))
-		m.displayMsg = fmt.Sprintf(
-			"renamed %s to %s", trimPath(m.paths[m.loc], m.folder), new_path)
-	case "alt+enter":
-		if input[len(input)-1] != byte('/') {
-			input += "/"
-		}
-		new_path = fmt.Sprintf(
-			"%s/%s%s", m.folder, input, trimPath(m.paths[m.loc], m.folder))
-		m.displayMsg = fmt.Sprintf(
-			"moved %s to %s", trimPath(m.paths[m.loc], m.folder), trimPath(new_path, m.folder))
-	}
-	return new_path
 }
 
 var extList []string = []string{".jpg", ".jpeg", ".png", ".webp"}
@@ -217,11 +194,32 @@ func initialModel() model {
 
 // util
 
-func assureDirsExist(input, folder, key string) error {
+func (m *model) getNewPath(input string, msg tea.KeyMsg) string {
+	var new_path string
+
+	switch msg.String() {
+	case "enter":
+		new_path = fmt.Sprintf(
+			"%s/%s%s", m.folder, input, path.Ext(m.paths[m.loc]))
+		m.displayMsg = fmt.Sprintf(
+			"renamed %s to %s", trimPath(m.paths[m.loc], m.folder), new_path)
+	case "alt+enter":
+		if input[len(input)-1] != byte('/') {
+			input += "/"
+		}
+		new_path = fmt.Sprintf(
+			"%s/%s%s", m.folder, input, trimPath(m.paths[m.loc], m.folder))
+		m.displayMsg = fmt.Sprintf(
+			"moved %s to %s", trimPath(m.paths[m.loc], m.folder), trimPath(new_path, m.folder))
+	}
+	return new_path
+}
+
+func assureDirsExist(input, folder string, msg tea.KeyMsg) error {
 	fields := strings.Split(input, "/")
 	path := folder + "/"
 	var target int
-	switch key {
+	switch msg.String() {
 	case "alt+enter":
 		target = len(fields)
 	case "enter":
