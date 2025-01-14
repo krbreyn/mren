@@ -108,7 +108,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 			// TODO ask if you're all done before quitting (after a going back mechanism)
-		case "enter", "alt+enter", "ctrl+enter":
+		case "enter", "alt+enter":
 			if m.loc < len(m.paths)-1 {
 				input := m.textInput.Value()
 
@@ -236,6 +236,7 @@ func getNewPath(input, key, folder, pathname string) (string, string) {
 			"%s/%s%s", folder, input, path.Ext(pathname))
 		display_msg = fmt.Sprintf(
 			"renamed %s to %s", trimPath(pathname, folder), new_path)
+
 	case "alt+enter":
 		if input[len(input)-1] != byte('/') {
 			input += "/"
@@ -255,6 +256,7 @@ func assureDirsExist(input, folder, key string) error {
 	switch key {
 	case "alt+enter":
 		target = len(fields)
+
 	case "enter":
 		target = len(fields) - 1
 	}
@@ -282,7 +284,6 @@ func backgroundDownloader(paths []string, outChan chan<- []byte) {
 }
 
 func getImage(filename string) []byte {
-
 	file, err := os.Open(filename)
 	if err != nil {
 		return []byte("opening file failed")
