@@ -41,14 +41,19 @@ func main() {
 		fmt.Println("error:", err)
 		os.Exit(1)
 	} else {
-		s, ok := m.(model)
-		if ok && s.exitMsg != "" {
-			fmt.Println(s.exitMsg)
-		}
-		fmt.Println("Have a nice day!")
-		os.Exit(0)
+		goodbye(m)
 	}
 
+}
+
+func goodbye(m tea.Model) {
+	s, ok := m.(model)
+	if ok && s.exitMsg != "" {
+		fmt.Println(s.exitMsg)
+	}
+
+	fmt.Println("Have a nice day!")
+	os.Exit(0)
 }
 
 type model struct {
@@ -70,19 +75,17 @@ func (m model) Init() tea.Cmd {
 func (m model) View() string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("img: %s\n%d/%d\n",
-		trimPath(m.paths[m.loc], m.folder), m.loc+1, len(m.paths)))
+	sb.WriteString(fmt.Sprintf("%d/%d | %s\n",
+		m.loc+1, len(m.paths), trimPath(m.paths[m.loc], m.folder)))
 
 	sb.WriteString("Enter New Name:\n")
 	sb.WriteString(m.textInput.View())
 
 	sb.WriteString("\nenter: empty = skip | 'asd' = rename | '../x/asd' = move & rename\n")
 	sb.WriteString("alt+enter: empty = delete | with '../x' = move without rename\n")
-	sb.WriteString("ctrl+enter: delete\n")
 	sb.WriteString("(todo) undo button\n")
 
-	sb.WriteString(m.displayMsg)
-	sb.WriteString("\n")
+	sb.WriteString(m.displayMsg + "\n")
 
 	sb.Write(m.currImage)
 
@@ -104,38 +107,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "ctrl+d":
 			return m, tea.Quit
 
-		// TODO ask if you're all done before quitting (after a going back mechanism)
+			// TODO ask if you're all done before quitting (after a going back mechanism)
 		case "enter", "alt+enter", "ctrl+enter":
 			if m.loc < len(m.paths)-1 {
 				input := m.textInput.Value()
-				if input != "" {
-					if err := assureDirsExist(input, m.folder, key); err != nil {
-						panic(err)
-					}
 
-					new_path := m.getNewPath(input, key)
-
-					err := os.Rename(m.paths[m.loc], new_path)
-					if err != nil {
-						panic(err)
-					}
-				} else {
-					if key == "alt+enter" {
-						err := os.Remove(m.paths[m.loc])
-						if err != nil {
-							m.displayMsg = fmt.Sprintf("failed to delete %s", trimPath(m.paths[m.loc], m.folder))
-						} else {
-							m.displayMsg = fmt.Sprintf("deleted %s", trimPath(m.paths[m.loc], m.folder))
-						}
-					} else {
-						m.displayMsg = fmt.Sprintf("skipped %s", trimPath(m.paths[m.loc], m.folder))
-					}
-				}
-
-				m.textInput.Reset()
+				action := handleInput(key, input, m.paths[m.loc], m.folder)
+				m.displayMsg = action()
 
 				m.loc++
-				//TODO trim ext
+				m.textInput.Reset()
 				m.textInput.Placeholder = trimPath(m.paths[m.loc], m.folder)
 			} else {
 				//m.toQuit++, displayMsg = "once more to quit"
@@ -146,7 +127,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		/* TODO change the image size to a model variable
-		initialized on startup and change it through here */
+		 *		initialized on startup and change it through here */
 
 	}
 
@@ -207,25 +188,64 @@ func initialModel() model {
 
 // util
 
-func (m *model) getNewPath(input, key string) string {
+func handleInput(key, input, pathname, folder string) func() string {
+	if input != "" {
+		if err := assureDirsExist(input, folder, key); err != nil {
+			panic(err)
+		}
+
+		new_path, display_msg := getNewPath(input, key, folder, pathname)
+
+		action := func() string {
+			if err := os.Rename(pathname, new_path); err != nil {
+				return fmt.Sprintf("error %v", err)
+			} else {
+				return display_msg
+			}
+		}
+
+		return action
+	} else {
+		if key != "alt+enter" {
+			action := func() string {
+				return fmt.Sprintf("skipped %s", trimPath(pathname, folder))
+			}
+
+			return action
+		}
+
+		action := func() string {
+			if err := os.Remove(pathname); err != nil {
+				return fmt.Sprintf("failed to delete %s", trimPath(pathname, folder))
+			} else {
+				return fmt.Sprintf("deleted %s", trimPath(pathname, folder))
+			}
+		}
+
+		return action
+	}
+}
+
+func getNewPath(input, key, folder, pathname string) (string, string) {
 	var new_path string
+	var display_msg string
 
 	switch key {
 	case "enter":
 		new_path = fmt.Sprintf(
-			"%s/%s%s", m.folder, input, path.Ext(m.paths[m.loc]))
-		m.displayMsg = fmt.Sprintf(
-			"renamed %s to %s", trimPath(m.paths[m.loc], m.folder), new_path)
+			"%s/%s%s", folder, input, path.Ext(pathname))
+		display_msg = fmt.Sprintf(
+			"renamed %s to %s", trimPath(pathname, folder), new_path)
 	case "alt+enter":
 		if input[len(input)-1] != byte('/') {
 			input += "/"
 		}
 		new_path = fmt.Sprintf(
-			"%s/%s%s", m.folder, input, trimPath(m.paths[m.loc], m.folder))
-		m.displayMsg = fmt.Sprintf(
-			"moved %s to %s", trimPath(m.paths[m.loc], m.folder), trimPath(new_path, m.folder))
+			"%s/%s%s", folder, input, trimPath(pathname, folder))
+		display_msg = fmt.Sprintf(
+			"moved %s to %s", trimPath(pathname, folder), trimPath(new_path, folder))
 	}
-	return new_path
+	return new_path, display_msg
 }
 
 func assureDirsExist(input, folder, key string) error {
