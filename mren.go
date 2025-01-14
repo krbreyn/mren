@@ -77,9 +77,8 @@ func (m model) View() string {
 	sb.WriteString(m.textInput.View())
 
 	sb.WriteString("\nenter: empty = skip | 'asd' = rename | '../x/asd' = move & rename\n")
-	sb.WriteString("alt+enter: with '../x' = move without rename\n")
-	sb.WriteString("(todo) shift+enter: delete\n")
-	sb.WriteString("(todo) ctrl+enter: copy\n")
+	sb.WriteString("alt+enter: empty = delete | with '../x' = move without rename\n")
+	sb.WriteString("ctrl+enter: delete\n")
 	sb.WriteString("(todo) undo button\n")
 
 	sb.WriteString(m.displayMsg)
@@ -100,28 +99,37 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.KeyMsg:
-		switch msg.String() {
-
+		key := msg.String()
+		switch key {
 		case "ctrl+c", "ctrl+d":
 			return m, tea.Quit
 
 		// TODO ask if you're all done before quitting (after a going back mechanism)
-		case "enter", "alt+enter":
+		case "enter", "alt+enter", "ctrl+enter":
 			if m.loc < len(m.paths)-1 {
 				input := m.textInput.Value()
 				if input != "" {
-					if err := assureDirsExist(input, m.folder, msg); err != nil {
+					if err := assureDirsExist(input, m.folder, key); err != nil {
 						panic(err)
 					}
 
-					new_path := m.getNewPath(input, msg)
+					new_path := m.getNewPath(input, key)
 
 					err := os.Rename(m.paths[m.loc], new_path)
 					if err != nil {
 						panic(err)
 					}
 				} else {
-					m.displayMsg = fmt.Sprintf("skipped %s", trimPath(m.paths[m.loc], m.folder))
+					if key == "alt+enter" {
+						err := os.Remove(m.paths[m.loc])
+						if err != nil {
+							m.displayMsg = fmt.Sprintf("failed to delete %s", trimPath(m.paths[m.loc], m.folder))
+						} else {
+							m.displayMsg = fmt.Sprintf("deleted %s", trimPath(m.paths[m.loc], m.folder))
+						}
+					} else {
+						m.displayMsg = fmt.Sprintf("skipped %s", trimPath(m.paths[m.loc], m.folder))
+					}
 				}
 
 				m.textInput.Reset()
@@ -199,10 +207,10 @@ func initialModel() model {
 
 // util
 
-func (m *model) getNewPath(input string, msg tea.KeyMsg) string {
+func (m *model) getNewPath(input, key string) string {
 	var new_path string
 
-	switch msg.String() {
+	switch key {
 	case "enter":
 		new_path = fmt.Sprintf(
 			"%s/%s%s", m.folder, input, path.Ext(m.paths[m.loc]))
@@ -220,11 +228,11 @@ func (m *model) getNewPath(input string, msg tea.KeyMsg) string {
 	return new_path
 }
 
-func assureDirsExist(input, folder string, msg tea.KeyMsg) error {
+func assureDirsExist(input, folder, key string) error {
 	fields := strings.Split(input, "/")
 	path := folder + "/"
 	var target int
-	switch msg.String() {
+	switch key {
 	case "alt+enter":
 		target = len(fields)
 	case "enter":
