@@ -190,7 +190,7 @@ func initialModel() model {
 
 func handleInput(key, input, pathname, folder string) func() string {
 	if input != "" {
-		if err := assureDirsExist(input, folder, key); err != nil {
+		if err := ensureDirsExist(input, folder, key); err != nil {
 			panic(err)
 		}
 
@@ -249,7 +249,7 @@ func getNewPath(input, key, folder, pathname string) (string, string) {
 	return new_path, display_msg
 }
 
-func assureDirsExist(input, folder, key string) error {
+func ensureDirsExist(input, folder, key string) error {
 	fields := strings.Split(input, "/")
 	path := folder + "/"
 	var target int
